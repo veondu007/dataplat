@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -17,4 +17,9 @@ class Datasource(Base):
     engine: Mapped[str] = mapped_column(String(32), nullable=False, default="doris")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="datasources")
+    tables: Mapped[list["Table"]] = relationship(
+        back_populates="datasource", cascade="all, delete-orphan"
     )

@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -14,3 +14,5 @@ class Column(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_partition: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    table: Mapped["Table"] = relationship(back_populates="columns")
