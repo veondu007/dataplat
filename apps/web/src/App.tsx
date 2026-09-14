@@ -5,12 +5,29 @@ import OverviewPage from "./pages/OverviewPage";
 import AssetPage from "./pages/AssetPage";
 import SqlPage from "./pages/SqlPage";
 import AiqaPage from "./pages/AiqaPage";
+import LoginPage from "./pages/LoginPage";
 import { APP_VERSION } from "./lib/version";
+import { isLoggedIn } from "./lib/auth";
 
 const { Header, Sider, Content } = Layout;
 
 export default function App() {
   const location = useLocation();
+
+  // 登录页不渲染控制台布局
+  if (location.pathname === "/login") {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
+  // 未登录：其余路由全部重定向到登录页
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />;
+  }
+
   const selected = "/" + (location.pathname.split("/")[1] || "");
 
   return (

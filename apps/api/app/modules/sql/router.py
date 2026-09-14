@@ -1,13 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.response import ok
+from app.core.security import get_current_user
 from app.modules.sql.guard import assert_readonly
 from app.modules.sql.schemas import SqlPreviewRequest
 
 router = APIRouter(prefix="/sql", tags=["sql"])
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[Depends(get_current_user)])
 def preview(body: SqlPreviewRequest):
     assert_readonly(body.sql)
     return ok(

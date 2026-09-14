@@ -31,7 +31,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     database_url: str = "postgresql+psycopg://dataplat:dataplat@127.0.0.1:5432/dataplat"
     redis_url: str = "redis://127.0.0.1:6379/0"
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "change-me-change-me-change-me-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 720  # 12 小时
+    admin_user: str = "admin"
+    admin_password: str = "admin123"
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = ""

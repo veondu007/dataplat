@@ -7,6 +7,7 @@ from app.core.request_id import new_request_id, set_request_id
 from app.core.response import ok
 from app.modules.aiqa.router import router as aiqa_router
 from app.modules.asset.router import router as asset_router
+from app.modules.auth.router import router as auth_router
 from app.modules.sql.router import router as sql_router
 from app.modules.workspace.router import router as workspace_router
 
@@ -37,6 +38,7 @@ async def request_id_middleware(request: Request, call_next):
 
 register_exception_handlers(app)
 
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(asset_router, prefix="/api/v1")
 app.include_router(sql_router, prefix="/api/v1")
