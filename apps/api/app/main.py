@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.handlers import register_exception_handlers
+from app.core.request_id import new_request_id, set_request_id
 from app.core.response import ok
 from app.modules.aiqa.router import router as aiqa_router
 from app.modules.asset.router import router as asset_router
@@ -21,6 +23,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = new_request_id()
+    set_request_id(rid)
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = rid
+    return response
+
+
+register_exception_handlers(app)
 
 app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(asset_router, prefix="/api/v1")

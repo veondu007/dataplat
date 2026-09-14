@@ -1,18 +1,21 @@
 import { Button, Card, Input, Typography } from "antd";
 import { useState } from "react";
+import { api } from "../lib/api";
 
 export default function SqlPage() {
   const [sql, setSql] = useState("SELECT 1");
   const [result, setResult] = useState("");
 
   async function run() {
-    const res = await fetch("/api/v1/sql/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sql }),
-    });
-    const body = await res.json();
-    setResult(JSON.stringify(body, null, 2));
+    try {
+      const data = await api<{ accepted: boolean; sql: string; message: string }>("/sql/preview", {
+        method: "POST",
+        body: JSON.stringify({ sql }),
+      });
+      setResult(JSON.stringify(data, null, 2));
+    } catch (err) {
+      setResult(String(err instanceof Error ? err.message : err));
+    }
   }
 
   return (

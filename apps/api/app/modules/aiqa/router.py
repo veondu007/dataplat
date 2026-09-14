@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app.core.response import ok
+from app.modules.aiqa.schemas import AiqaAskRequest
 from app.modules.sql.guard import assert_readonly
 
 router = APIRouter(prefix="/aiqa", tags=["aiqa"])
@@ -12,18 +13,13 @@ def create_session():
 
 
 @router.post("/sessions/{session_id}/ask")
-def ask(session_id: str, body: dict):
-    question = (body or {}).get("question", "")
-    sql = (body or {}).get("sql")
-    if sql:
-        try:
-            assert_readonly(sql)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+def ask(session_id: str, body: AiqaAskRequest):
+    if body.sql:
+        assert_readonly(body.sql)
     return ok(
         {
             "session_id": session_id,
-            "question": question,
+            "question": body.question,
             "tables": [],
             "sql": None,
             "needs_confirm": True,

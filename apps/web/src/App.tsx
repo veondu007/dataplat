@@ -5,6 +5,7 @@ import OverviewPage from "./pages/OverviewPage";
 import AssetPage from "./pages/AssetPage";
 import SqlPage from "./pages/SqlPage";
 import AiqaPage from "./pages/AiqaPage";
+import { APP_VERSION } from "./lib/version";
 
 const { Header, Sider, Content } = Layout;
 
@@ -38,7 +39,7 @@ export default function App() {
         >
           <Typography.Text>默认空间</Typography.Text>
           <Tag color="blue">Doris</Tag>
-          <Tag>0.1.0-dev</Tag>
+          <Tag>{APP_VERSION}</Tag>
         </Header>
         <Content style={{ margin: 24 }}>
           <Routes>

@@ -1,5 +1,5 @@
 # API
 
-运行 `apps/api` 后查看 OpenAPI：http://127.0.0.1:8000/docs
+- [API 设计规范](./API设计规范.md)：统一响应信封、错误码、鉴权约定、端点清单、SQL 护栏说明。
 
-当前前缀：`/api/v1`（workspaces / assets / sql / aiqa）。
+运行时查看 OpenAPI：http://127.0.0.1:8000/docs（当前前缀 `/api/v1`）。

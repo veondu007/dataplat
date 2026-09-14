@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataplat-collector-doris"
+version = "0.1.0-dev"
+description = "DataPlat Doris metadata collector (P0). Must use a dedicated read-only Doris account, never personal query accounts."
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["."]

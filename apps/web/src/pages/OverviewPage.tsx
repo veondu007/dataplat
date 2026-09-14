@@ -1,5 +1,6 @@
 import { Card, Col, Row, Statistic } from "antd";
 import { useEffect, useState } from "react";
+import { api } from "../lib/api";
 
 type Overview = {
   datasource_count: number;
@@ -7,14 +8,15 @@ type Overview = {
   column_count: number;
 };
 
+const EMPTY: Overview = { datasource_count: 0, table_count: 0, column_count: 0 };
+
 export default function OverviewPage() {
   const [data, setData] = useState<Overview | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/assets/overview")
-      .then((r) => r.json())
-      .then((body) => setData(body.data))
-      .catch(() => setData({ datasource_count: 0, table_count: 0, column_count: 0 }));
+    api<Overview>("/assets/overview")
+      .then(setData)
+      .catch(() => setData(EMPTY));
   }, []);
 
   return (
