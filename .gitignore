@@ -1,0 +1,44 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+apps/web/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+!**/*.env.example
+deploy/env/*.env
+!deploy/env/*.env.example
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / coverage
+coverage/
+htmlcov/
+.coverage
+playwright-report/
+test-results/
+
+*.log
+tmp/
+data/local/
