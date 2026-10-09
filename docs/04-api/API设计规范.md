@@ -81,6 +81,26 @@ curl -H "Authorization: Bearer <jwt>" http://127.0.0.1:8000/api/v1/workspaces
 | POST | `/aiqa/sessions/{session_id}/ask` | 问数提问（可携带待确认 SQL） |
 | GET | `/health` | 健康检查（前缀外，公开） |
 
+**数据源（P0 新增，`/datasources`）**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/datasources` | 数据源列表（凭证掩码） |
+| POST | `/datasources` | 新建（mysql / maxcompute / xlsx） |
+| GET | `/datasources/{id}` | 详情（凭证掩码） |
+| PUT | `/datasources/{id}` | 更新 |
+| DELETE | `/datasources/{id}` | 删除 |
+| POST | `/datasources/{id}/test` | 连通性测试 |
+| GET | `/datasources/{id}/tables` | 源表列表 |
+| POST | `/datasources/{id}/sync` | 触发同步（mysql/maxcompute，JSON body）→ `{job_id}` |
+| POST | `/datasources/{id}/sync-xlsx` | xlsx 文件上传+同步（multipart）→ `{job_id}` |
+| POST | `/datasources/xlsx/parse` | xlsx 解析（multipart）→ `{sheets:[{name,cols,rows}]}` |
+| GET | `/datasources/sync/jobs?datasource_id=` | 某数据源的任务历史 |
+| GET | `/datasources/sync/{job_id}` | 轮询任务状态（pending/running/success/failed + attempts） |
+| POST | `/datasources/sync/{job_id}/retry` | 失败任务手动重跑 |
+
+同步任务由 API 内后台线程执行（进程内 registry），失败自动重试（默认 2 次），前端轮询 `GET /sync/{job_id}`。目标 Doris 表自动建表（源类型映射 + UNIQUE KEY），Stream Load 灌入。REST 端点均需要 Bearer JWT。
+
 ## 5. 请求体模型（Pydantic）
 
 | 模型 | 字段 | 约束 |
