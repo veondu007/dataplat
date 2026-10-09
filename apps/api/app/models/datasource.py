@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.datasource_conn import DatasourceConn
     from app.models.table import Table
     from app.models.workspace import Workspace
 
@@ -27,6 +28,9 @@ class Datasource(Base):
     )
 
     workspace: Mapped["Workspace"] = relationship(back_populates="datasources")
+    conn: Mapped["DatasourceConn | None"] = relationship(
+        back_populates="datasource", cascade="all, delete-orphan", uselist=False
+    )
     tables: Mapped[list["Table"]] = relationship(
         back_populates="datasource", cascade="all, delete-orphan"
     )

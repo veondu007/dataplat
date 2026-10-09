@@ -8,6 +8,7 @@ from app.core.response import ok
 from app.modules.aiqa.router import router as aiqa_router
 from app.modules.asset.router import router as asset_router
 from app.modules.auth.router import router as auth_router
+from app.modules.datasource.router import router as datasource_router
 from app.modules.sql.router import router as sql_router
 from app.modules.workspace.router import router as workspace_router
 
@@ -40,6 +41,7 @@ register_exception_handlers(app)
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(workspace_router, prefix="/api/v1")
+app.include_router(datasource_router, prefix="/api/v1")
 app.include_router(asset_router, prefix="/api/v1")
 app.include_router(sql_router, prefix="/api/v1")
 app.include_router(aiqa_router, prefix="/api/v1")

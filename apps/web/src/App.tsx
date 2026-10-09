@@ -1,8 +1,9 @@
-import { DatabaseOutlined, MessageOutlined, CodeOutlined, HomeOutlined } from "@ant-design/icons";
+import { DatabaseOutlined, MessageOutlined, CodeOutlined, HomeOutlined, CloudServerOutlined } from "@ant-design/icons";
 import { Layout, Menu, Typography, Tag } from "antd";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import OverviewPage from "./pages/OverviewPage";
 import AssetPage from "./pages/AssetPage";
+import DatasourcePage from "./pages/DatasourcePage";
 import SqlPage from "./pages/SqlPage";
 import AiqaPage from "./pages/AiqaPage";
 import LoginPage from "./pages/LoginPage";
@@ -38,6 +39,7 @@ export default function App() {
           selectedKeys={[selected === "/" ? "/" : selected]}
           items={[
             { key: "/", icon: <HomeOutlined />, label: <Link to="/">总览</Link> },
+            { key: "/datasources", icon: <CloudServerOutlined />, label: <Link to="/datasources">数据源</Link> },
             { key: "/assets", icon: <DatabaseOutlined />, label: <Link to="/assets">数据资产</Link> },
             { key: "/sql", icon: <CodeOutlined />, label: <Link to="/sql">SQL 开发</Link> },
             { key: "/aiqa", icon: <MessageOutlined />, label: <Link to="/aiqa">AI 问数</Link> },
@@ -61,6 +63,7 @@ export default function App() {
         <Content style={{ margin: 24 }}>
           <Routes>
             <Route path="/" element={<OverviewPage />} />
+            <Route path="/datasources" element={<DatasourcePage />} />
             <Route path="/assets" element={<AssetPage />} />
             <Route path="/sql" element={<SqlPage />} />
             <Route path="/aiqa" element={<AiqaPage />} />
