@@ -42,3 +42,7 @@ test-results/
 *.log
 tmp/
 data/local/
+
+# Doris 本地集群数据（deploy/doris 下的运行期产物不入库）
+deploy/doris/fe-*/
+deploy/doris/be-*/
