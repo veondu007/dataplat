@@ -49,22 +49,41 @@ DataPlat/
 
 需要 Node 18+、Python 3.10、Docker。
 
+**第 1 步：启动依赖（PostgreSQL/Redis + Doris 2FE2BE 集群）**
+
 ```bash
+# 平台元数据库 PostgreSQL + Redis
 docker compose -f deploy/docker-compose.yml up -d
 
+# Doris 业务数据源（2 FE + 2 BE，每实例 5G，含 credit 信贷测试库初始化）
+cd deploy/doris && docker compose up -d && cd ../..
+# 等待约 1~3 分钟，BE 全部 Alive（见 deploy/doris/README.md 健康检查）
+```
+
+**第 2 步：启动 API**
+
+```bash
 cd apps/api
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
+python -m alembic upgrade head     # 初始化平台元数据表（PostgreSQL）
 uvicorn app.main:app --reload --port 8000
+```
 
+API 通过 `DATAPLAT_DORIS_*` 环境变量连接 Doris FE（默认 `root@127.0.0.1:9030/credit`，见 `deploy/env/api.env.example`）。
+
+**第 3 步：启动 Web**
+
+```bash
 cd apps/web
 npm install
 npm run dev
 ```
 
-- 控制台：http://127.0.0.1:5173
+- 控制台：http://127.0.0.1:5173 （登录 `admin / admin123`）
 - API 文档：http://127.0.0.1:8000/docs
+- Doris 集群 / 信贷测试库 / 配置项详见 [`deploy/doris/README.md`](deploy/doris/README.md) 与 [`docs/05-ops/本地配置与启动.md`](docs/05-ops/本地配置与启动.md)
 
 ## 版本与环境
 

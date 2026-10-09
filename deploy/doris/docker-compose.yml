@@ -1,0 +1,109 @@
+# DataPlat 本地 Doris 集群：2 FE（1 master + 1 follower）+ 2 BE
+#
+# 镜像：Apache Doris 2.0.0_alpha（x86_64 官方组合镜像，内含 mysql 客户端，支持
+#       FE_SERVERS / FE_ID / BE_ADDR 环境变量自动组网与 BE 自动注册）
+# 内存：每个 FE / BE 容器 mem_limit=5g（本机 Docker Desktop 内存上限请保持 >= 12g）
+# 端口：
+#   FE  8030(WebUI) / 9030(mysql 协议查询)   —— 对外映射 8030/9030（fe-1）、8031/9031（fe-2）
+#   BE  8040(webserver)                       —— 对外映射 8041/8042
+# 数据：本地目录挂载持久化（fe*/doris-meta、be*/storage），重启不丢数据
+#
+# 用法：
+#   cd deploy/doris && docker compose up -d
+#   等 FE/BE 全部 healthy 后：mysql -h127.0.0.1 -P9030 -uroot
+#   （Doris 2.0 root 默认空密码；第一次启动需 1~2 分钟完成 FE 选主与 BE 注册）
+
+name: dataplat-doris
+
+x-doris-common: &doris-common
+  restart: on-failure
+  mem_limit: 5g
+  memswap_limit: 5g
+  networks:
+    doris_net:
+
+services:
+  fe-1:
+    <<: *doris-common
+    image: docker.1panel.live/apache/doris:2.0.0_alpha-fe-x86_64
+    container_name: dataplat-doris-fe-1
+    hostname: doris-fe-1
+    environment:
+      FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
+      FE_ID: "1"
+    ports:
+      - "8030:8030"   # FE Web UI
+      - "9030:9030"   # MySQL protocol
+    volumes:
+      - ./fe-1/doris-meta:/opt/apache-doris/fe/doris-meta
+      - ./fe-1/log:/opt/apache-doris/fe/log
+    networks:
+      doris_net:
+        ipv4_address: 10.0.80.2
+
+  fe-2:
+    <<: *doris-common
+    image: docker.1panel.live/apache/doris:2.0.0_alpha-fe-x86_64
+    container_name: dataplat-doris-fe-2
+    hostname: doris-fe-2
+    environment:
+      FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
+      FE_ID: "2"
+    ports:
+      - "8031:8030"
+      - "9031:9030"
+    volumes:
+      - ./fe-2/doris-meta:/opt/apache-doris/fe/doris-meta
+      - ./fe-2/log:/opt/apache-doris/fe/log
+    networks:
+      doris_net:
+        ipv4_address: 10.0.80.3
+
+  be-1:
+    <<: *doris-common
+    image: docker.1panel.live/apache/doris:2.0.0_alpha-be-x86_64
+    container_name: dataplat-doris-be-1
+    hostname: doris-be-1
+    depends_on:
+      - fe-1
+      - fe-2
+    environment:
+      FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
+      BE_ADDR: "10.0.80.4:9050"
+    ports:
+      - "8041:8040"   # BE webserver (metrics)
+    volumes:
+      - ./be-1/storage:/opt/apache-doris/be/storage
+      - ./be-1/log:/opt/apache-doris/be/log
+      - ./init-sql:/docker-entrypoint-initdb.d:ro
+    networks:
+      doris_net:
+        ipv4_address: 10.0.80.4
+
+  be-2:
+    <<: *doris-common
+    image: docker.1panel.live/apache/doris:2.0.0_alpha-be-x86_64
+    container_name: dataplat-doris-be-2
+    hostname: doris-be-2
+    depends_on:
+      - fe-1
+      - fe-2
+    environment:
+      FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
+      BE_ADDR: "10.0.80.5:9050"
+    ports:
+      - "8042:8040"
+    volumes:
+      - ./be-2/storage:/opt/apache-doris/be/storage
+      - ./be-2/log:/opt/apache-doris/be/log
+      - ./init-sql:/docker-entrypoint-initdb.d:ro
+    networks:
+      doris_net:
+        ipv4_address: 10.0.80.5
+
+networks:
+  doris_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.80.0/24

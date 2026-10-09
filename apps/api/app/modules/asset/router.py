@@ -1,11 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.response import ok
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/assets", tags=["asset"])
 
 
-@router.get("/overview")
+@router.get("/overview", dependencies=[Depends(get_current_user)])
 def overview():
     return ok(
         {
@@ -17,6 +18,6 @@ def overview():
     )
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[Depends(get_current_user)])
 def search(q: str = ""):
     return ok({"keyword": q, "items": []})

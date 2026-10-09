@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.datasource import Datasource
 
 
 class Workspace(Base):
@@ -14,4 +20,8 @@ class Workspace(Base):
     env: Mapped[str] = mapped_column(String(16), nullable=False, default="dev")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    datasources: Mapped[list["Datasource"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
     )

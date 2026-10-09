@@ -31,10 +31,26 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     database_url: str = "postgresql+psycopg://dataplat:dataplat@127.0.0.1:5432/dataplat"
     redis_url: str = "redis://127.0.0.1:6379/0"
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "change-me-change-me-change-me-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 720  # 12 小时
+    admin_user: str = "admin"
+    admin_password: str = "admin123"
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = ""
+
+    # —— Doris 业务数据源（SQL 工作台 / AI 问数 的目标）——
+    # 平台元数据仍存 PostgreSQL（database_url）；Doris 只承载用户业务表。
+    # 本地集群见 deploy/doris/docker-compose.yml（2 FE + 2 BE，FE 查询端口 9030/9031）。
+    doris_host: str = "127.0.0.1"
+    doris_port: int = 9030
+    doris_user: str = "root"
+    doris_password: str = ""
+    doris_database: str = "credit"
+    doris_connect_timeout: int = 10  # 秒
+    # Doris Stream Load HTTP 端口（FE HTTP，本地 compose 对外 8030），307 重定向到 BE
+    doris_http_port: int = 8030
 
 
 settings = Settings()

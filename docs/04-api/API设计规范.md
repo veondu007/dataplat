@@ -29,7 +29,7 @@
 | 0 | 200 | 成功 |
 | 40000 | 422 | 参数校验失败（Pydantic） |
 | 40001 | 400 | SQL 护栏拦截（仅允许 SELECT/SHOW/EXPLAIN/DESC） |
-| 40100 | 401 | 未认证（预留） |
+| 40100 | 401 | 未认证 / token 无效或过期 |
 | 40300 | 403 | 无权限（预留） |
 | 40400 | 404 | 资源不存在（路由未匹配等） |
 | 50000 | 500 | 服务端内部错误 |
@@ -45,10 +45,24 @@
 }
 ```
 
-## 3. 鉴权（P0 约定，当前骨架未启用）
+## 3. 鉴权（JWT，已启用）
 
-- 预留 JWT 方案：请求头 `Authorization: Bearer <token>`。
-- 当前所有接口匿名可访问；接入时全局依赖注入，401/403 使用上表错误码。
+- 登录：`POST /api/v1/auth/login`（body `{username, password}`）→ 返回 `{token, expires_in, user}`。
+- 除 `/health`、`/api/v1/auth/login` 外，**所有接口要求**请求头 `Authorization: Bearer <token>`。
+- token 为 HS256 签发的 JWT，有效期 `DATAPLAT_JWT_EXPIRE_MINUTES`（默认 720 分钟 = 12h），签名密钥 `DATAPLAT_JWT_SECRET`。
+- 校验失败统一返回 `40100`（HTTP 401）。
+- 本地骨架账号：`DATAPLAT_ADMIN_USER` / `DATAPLAT_ADMIN_PASSWORD`（默认 `admin` / `admin123`，生产必须修改）。
+
+请求示例：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+# → {"code":0,"data":{"token":"<jwt>","expires_in":43200,"user":{"username":"admin"}},...}
+
+curl -H "Authorization: Bearer <jwt>" http://127.0.0.1:8000/api/v1/workspaces
+```
 
 ## 4. 当前端点清单
 
@@ -56,6 +70,8 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/auth/login` | 登录（公开，返回 JWT） |
+| GET | `/auth/me` | 当前用户 |
 | GET | `/workspaces` | 空间列表 |
 | GET | `/workspaces/me/doris-binding` | 个人 Doris 账号绑定状态 |
 | GET | `/assets/overview` | 资产规模总览 |
@@ -63,7 +79,27 @@
 | POST | `/sql/preview` | SQL 只读校验（未绑定账号不真实执行） |
 | POST | `/aiqa/sessions` | 新建问数会话 |
 | POST | `/aiqa/sessions/{session_id}/ask` | 问数提问（可携带待确认 SQL） |
-| GET | `/health` | 健康检查（前缀外） |
+| GET | `/health` | 健康检查（前缀外，公开） |
+
+**数据源（P0 新增，`/datasources`）**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/datasources` | 数据源列表（凭证掩码） |
+| POST | `/datasources` | 新建（mysql / maxcompute / xlsx） |
+| GET | `/datasources/{id}` | 详情（凭证掩码） |
+| PUT | `/datasources/{id}` | 更新 |
+| DELETE | `/datasources/{id}` | 删除 |
+| POST | `/datasources/{id}/test` | 连通性测试 |
+| GET | `/datasources/{id}/tables` | 源表列表 |
+| POST | `/datasources/{id}/sync` | 触发同步（mysql/maxcompute，JSON body）→ `{job_id}` |
+| POST | `/datasources/{id}/sync-xlsx` | xlsx 文件上传+同步（multipart）→ `{job_id}` |
+| POST | `/datasources/xlsx/parse` | xlsx 解析（multipart）→ `{sheets:[{name,cols,rows}]}` |
+| GET | `/datasources/sync/jobs?datasource_id=` | 某数据源的任务历史 |
+| GET | `/datasources/sync/{job_id}` | 轮询任务状态（pending/running/success/failed + attempts） |
+| POST | `/datasources/sync/{job_id}/retry` | 失败任务手动重跑 |
+
+同步任务由 API 内后台线程执行（进程内 registry），失败自动重试（默认 2 次），前端轮询 `GET /sync/{job_id}`。目标 Doris 表自动建表（源类型映射 + UNIQUE KEY），Stream Load 灌入。REST 端点均需要 Bearer JWT。
 
 ## 5. 请求体模型（Pydantic）
 

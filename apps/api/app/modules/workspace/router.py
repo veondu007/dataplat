@@ -1,11 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.response import ok
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/workspaces", tags=["workspace"])
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(get_current_user)])
 def list_workspaces():
     return ok(
         [
@@ -19,7 +20,7 @@ def list_workspaces():
     )
 
 
-@router.get("/me/doris-binding")
+@router.get("/me/doris-binding", dependencies=[Depends(get_current_user)])
 def doris_binding():
     return ok(
         {
