@@ -31,6 +31,8 @@ services:
     environment:
       FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
       FE_ID: "1"
+      # FE JVM 默认 -Xmx8192m 超出容器 mem_limit 5g 会 OOM;调到 3g 适配容器
+      FE_JAVA_OPTS: "-Xmx3072m"
     ports:
       - "8030:8030"   # FE Web UI
       - "9030:9030"   # MySQL protocol
@@ -49,6 +51,7 @@ services:
     environment:
       FE_SERVERS: "fe1:10.0.80.2:9010,fe2:10.0.80.3:9010"
       FE_ID: "2"
+      FE_JAVA_OPTS: "-Xmx3072m"
     ports:
       - "8031:8030"
       - "9031:9030"
