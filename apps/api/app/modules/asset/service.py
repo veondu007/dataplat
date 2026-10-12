@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.exceptions import ApiError, ErrorCode
-from app.models import Column, Datasource, Table
+from app.models import AssetTag, Column, Datasource, Table, TableLineage, TableTag
 from app.modules.asset.collector import DorisMetadataConnector
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,8 @@ class AssetSyncService:
                                 num_rows=t.get("num_rows"),
                                 data_size=t.get("data_size"),
                                 engine=t.get("engine"),
-                                partition_cols=None,
+                                create_sql=t.get("create_sql"),
+                                partition_cols=t.get("partition_cols"),
                                 is_deleted=False,
                                 sync_version=sync_version,
                                 last_synced_at=now_cn(),
@@ -148,6 +149,8 @@ class AssetSyncService:
                                     "num_rows": pg_insert(Table).excluded.num_rows,
                                     "data_size": pg_insert(Table).excluded.data_size,
                                     "engine": pg_insert(Table).excluded.engine,
+                                    "create_sql": pg_insert(Table).excluded.create_sql,
+                                    "partition_cols": pg_insert(Table).excluded.partition_cols,
                                     "is_deleted": False,
                                     "sync_version": sync_version,
                                     "last_synced_at": now_cn(),
@@ -330,6 +333,7 @@ def get_table_detail(db: Session, table_id: str) -> dict:
         "data_size": t.data_size,
         "engine": t.engine,
         "partition_cols": t.partition_cols,
+        "create_sql": t.create_sql,
         "last_synced_at": t.last_synced_at.isoformat() if t.last_synced_at else None,
         "columns": [
             {
@@ -453,3 +457,121 @@ def get_stats(db: Session) -> dict:
         "top_rows": [{"name": r[0], "database": r[1], "num_rows": r[2]} for r in _top_rows],
         "top_columns": [{"name": r[0], "database": r[1], "column_count": r[2]} for r in _top_columns],
     }
+
+
+# —— 血缘(表级;手动登记) ——
+
+
+def _lineage_edge(db: Session, table_id: str, direction: str) -> list[dict]:
+    rows = db.execute(
+        select(TableLineage, Table.database_name, Table.name)
+        .join(Table, Table.id == TableLineage.related_table_id)
+        .where(TableLineage.table_id == table_id, TableLineage.direction == direction)
+        .order_by(Table.database_name, Table.name)
+    ).all()
+    return [
+        {
+            "lineage_id": ln.id,
+            "table_id": ln.related_table_id,
+            "database_name": database_name,
+            "name": name,
+            "edge_type": ln.edge_type,
+        }
+        for ln, database_name, name in rows
+    ]
+
+
+def get_table_lineage(db: Session, table_id: str) -> dict:
+    """返回某表的上下游血缘(手动登记的边)。"""
+    return {
+        "upstream": _lineage_edge(db, table_id, "upstream"),
+        "downstream": _lineage_edge(db, table_id, "downstream"),
+    }
+
+
+def add_lineage(
+    db: Session,
+    table_id: str,
+    related_table_id: str,
+    direction: str,
+    edge_type: str = "manual",
+    note: str | None = None,
+) -> dict:
+    if direction not in ("upstream", "downstream"):
+        raise ApiError(ErrorCode.VALIDATION, f"direction 非法: {direction}", status_code=400)
+    if table_id == related_table_id:
+        raise ApiError(ErrorCode.VALIDATION, "不能与自身建立血缘", status_code=400)
+    if db.get(Table, table_id) is None or db.get(Table, related_table_id) is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "表不存在", status_code=404)
+    ln = TableLineage(
+        id=f"ln_{uuid.uuid4().hex[:12]}",
+        table_id=table_id,
+        related_table_id=related_table_id,
+        direction=direction,
+        edge_type=edge_type or "manual",
+        note=note,
+    )
+    db.add(ln)
+    db.commit()
+    return {"id": ln.id}
+
+
+def remove_lineage(db: Session, lineage_id: str) -> dict:
+    ln = db.get(TableLineage, lineage_id)
+    if ln is None:
+        raise ApiError(ErrorCode.NOT_FOUND, f"血缘边不存在: {lineage_id}", status_code=404)
+    db.delete(ln)
+    db.commit()
+    return {"id": lineage_id}
+
+
+# —— 业务标签(扁平:预置 + 自定义) ——
+
+
+def list_tags(db: Session) -> list[dict]:
+    rows = db.execute(
+        select(AssetTag).order_by(AssetTag.name)
+    ).scalars().all()
+    return [{"id": t.id, "name": t.name} for t in rows]
+
+
+def get_table_tags(db: Session, table_id: str) -> list[str]:
+    rows = db.execute(
+        select(AssetTag.name)
+        .join(TableTag, TableTag.tag_id == AssetTag.id)
+        .where(TableTag.table_id == table_id)
+        .order_by(AssetTag.name)
+    ).scalars().all()
+    return list(rows)
+
+
+def add_table_tag(db: Session, table_id: str, tag: str) -> dict:
+    tag = (tag or "").strip()
+    if not tag:
+        raise ApiError(ErrorCode.VALIDATION, "标签不能为空", status_code=400)
+    if db.get(Table, table_id) is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "表不存在", status_code=404)
+    a_tag = db.execute(select(AssetTag).where(AssetTag.name == tag)).scalar_one_or_none()
+    if a_tag is None:
+        a_tag = AssetTag(id=f"tag_{uuid.uuid4().hex[:12]}", name=tag)
+        db.add(a_tag)
+        db.flush()
+    exist = db.execute(
+        select(TableTag).where(TableTag.table_id == table_id, TableTag.tag_id == a_tag.id)
+    ).scalar_one_or_none()
+    if exist is None:
+        db.add(TableTag(table_id=table_id, tag_id=a_tag.id))
+    db.commit()
+    return {"tag": tag}
+
+
+def remove_table_tag(db: Session, table_id: str, tag: str) -> dict:
+    a_tag = db.execute(select(AssetTag).where(AssetTag.name == tag)).scalar_one_or_none()
+    if a_tag is not None:
+        row = db.execute(
+            select(TableTag).where(TableTag.table_id == table_id, TableTag.tag_id == a_tag.id)
+        ).scalar_one_or_none()
+        if row is not None:
+            db.delete(row)
+            db.commit()
+    return {"tag": tag}

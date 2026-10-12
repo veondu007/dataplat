@@ -108,8 +108,11 @@ class DorisMetadataConnector:
                 rows = cur.fetchall()
             out = []
             for name, comment, engine, num_rows, data_len, create_time, update_time in rows:
-                # information_schema 的 ENGINE 恒为存储引擎("Doris");表模型用 SHOW CREATE 解析
-                engine = self._table_model(database, name) or engine
+                # information_schema 的 ENGINE 恒为存储引擎("Doris");表模型/分区/DDL 用 SHOW CREATE 解析
+                ddl = self._table_ddl(database, name)
+                if ddl:
+                    engine = _extract_table_model(ddl) or engine
+                pkeys = _extract_partition_keys(ddl or "")
                 out.append(
                     {
                         "database_name": database,
@@ -118,6 +121,8 @@ class DorisMetadataConnector:
                         "engine": engine,  # 表模型 UNIQUE/DUPLICATE/AGGREGATE
                         "num_rows": _to_int(num_rows),
                         "data_size": _to_int(data_len),
+                        "create_sql": ddl,
+                        "partition_cols": (",".join(sorted(pkeys)) or None),
                         "create_time": _to_datetime(create_time),
                         "update_time": _to_datetime(update_time),
                     }
@@ -190,6 +195,23 @@ class DorisMetadataConnector:
             else:
                 ddl = str(row or "")
             return _extract_table_model(ddl)
+        except Exception:
+            return None
+        finally:
+            conn.close()
+
+    def _table_ddl(self, database: str, table: str) -> str | None:
+        """返回 SHOW CREATE TABLE 完整 DDL;失败返回 None。"""
+        conn = self._connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW CREATE TABLE `{database}`.`{table}`")
+                row = cur.fetchone()
+            if not row:
+                return None
+            if isinstance(row, tuple):
+                return row[1] if len(row) > 1 else row[0]  # Doris 返回 (Table, Create Table)
+            return str(row)
         except Exception:
             return None
         finally:

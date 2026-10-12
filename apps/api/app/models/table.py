@@ -18,8 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.asset_tag import AssetTag
     from app.models.column import Column
     from app.models.datasource import Datasource
+    from app.models.table_lineage import TableLineage
 
 
 class Table(Base):
@@ -43,6 +45,9 @@ class Table(Base):
     sync_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 采集批号(用于软删比对)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # 建表语句(采集 SHOW CREATE 全文;P0 展示 + 复制 DDL)
+    create_sql: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -53,4 +58,12 @@ class Table(Base):
     datasource: Mapped["Datasource"] = relationship(back_populates="tables")
     columns: Mapped[list["Column"]] = relationship(
         back_populates="table", cascade="all, delete-orphan"
+    )
+    tags: Mapped[list["AssetTag"]] = relationship(
+        secondary="table_tags", back_populates="tables"
+    )
+    lineage: Mapped[list["TableLineage"]] = relationship(
+        foreign_keys="TableLineage.table_id",
+        back_populates="table",
+        cascade="all, delete-orphan",
     )

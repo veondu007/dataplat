@@ -4,12 +4,14 @@
 Database / Partition / 血缘等实体随采集器迭代补充。
 """
 
+from app.models.asset_tag import AssetTag, TableTag
 from app.models.column import Column
 from app.models.datasource import Datasource
 from app.models.datasource_conn import DatasourceConn
 from app.models.sync_job import SyncJob
 from app.models.sync_run import SyncRun
 from app.models.table import Table
+from app.models.table_lineage import TableLineage
 from app.models.workspace import Workspace
 
 __all__ = [
@@ -18,6 +20,9 @@ __all__ = [
     "DatasourceConn",
     "Table",
     "Column",
+    "AssetTag",
+    "TableTag",
+    "TableLineage",
     "SyncJob",
     "SyncRun",
 ]

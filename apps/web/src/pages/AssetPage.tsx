@@ -1,5 +1,5 @@
 import {
-  Button, Card, Col, Collapse, Descriptions, Drawer, Empty, Input, Row, Space, Spin, Statistic, Table, Tag,
+  AutoComplete, Button, Card, Col, Collapse, Descriptions, Drawer, Empty, Input, List, Row, Select, Space, Spin, Statistic, Table, Tag,
   Typography, message,
 } from "antd";
 import { DatabaseOutlined, SearchOutlined, SyncOutlined, TableOutlined } from "@ant-design/icons";
@@ -35,7 +35,19 @@ type ColumnMeta = {
   comment?: string | null;
 };
 
-type TableDetail = TableMeta & { columns: ColumnMeta[] };
+type TableDetail = TableMeta & {
+  columns: ColumnMeta[];
+  create_sql?: string | null;
+};
+
+/** 血缘边(手动登记)。 */
+type LineageEdge = {
+  lineage_id: string;
+  table_id: string;
+  database_name: string;
+  name: string;
+  edge_type: string;
+};
 
 /** 搜索命中项：TableMeta 基础上补充来源数据源与命中字段。 */
 type SearchResult = TableMeta & {
@@ -70,6 +82,87 @@ export default function AssetPage() {
   const [detail, setDetail] = useState<TableDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // 详情扩展：标签 / 血缘
+  const [detailTags, setDetailTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([]);
+  const [detailLineage, setDetailLineage] = useState<{ upstream: LineageEdge[]; downstream: LineageEdge[] } | null>(null);
+  const [tagInput, setTagInput] = useState<string[]>([]);
+  const [lnSearch, setLnSearch] = useState("");
+  const [lnOptions, setLnOptions] = useState<{ value: string; id: string }[]>([]);
+  const [lnDir, setLnDir] = useState<"upstream" | "downstream">("upstream");
+  const [lnRelatedId, setLnRelatedId] = useState("");
+
+  function loadExtras(tableId: string) {
+    api<string[]>(`/assets/tables/${tableId}/tags`).then(setDetailTags).catch(() => {});
+    api<{ upstream: LineageEdge[]; downstream: LineageEdge[] }>(`/assets/tables/${tableId}/lineage`).then(setDetailLineage).catch(() => {});
+  }
+
+  function openDetail(row: TableMeta) {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailTags([]);
+    setDetailLineage(null);
+    api<TableDetail>(`/assets/tables/${row.id}`)
+      .then((d) => {
+        setDetail(d);
+        loadExtras(row.id);
+      })
+      .catch((e) => message.error(e.message))
+      .finally(() => setDetailLoading(false));
+    if (!allTags.length) {
+      api<{ id: string; name: string }[]>("/assets/tags").then(setAllTags).catch(() => {});
+    }
+  }
+
+  async function addTag(tag: string) {
+    if (!detail) return;
+    const t = tag.trim();
+    if (!t) return;
+    try {
+      await api(`/assets/tables/${detail.id}/tags`, { method: "POST", body: JSON.stringify({ tag: t }) });
+      setDetailTags(await api<string[]>(`/assets/tables/${detail.id}/tags`));
+      setTagInput([]);
+    } catch (e) { message.error(e instanceof Error ? e.message : "打标失败"); }
+  }
+
+  async function removeTag(tag: string) {
+    if (!detail) return;
+    try {
+      await api(`/assets/tables/${detail.id}/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
+      setDetailTags((ts) => ts.filter((x) => x !== tag));
+    } catch (e) { message.error(e instanceof Error ? e.message : "移除标签失败"); }
+  }
+
+  async function removeLineage(id: string) {
+    if (!detail) return;
+    try {
+      await api(`/assets/tables/${detail.id}/lineage/${id}`, { method: "DELETE" });
+      loadExtras(detail.id);
+    } catch (e) { message.error(e instanceof Error ? e.message : "移除血缘失败"); }
+  }
+
+  async function searchLn(kw: string) {
+    setLnSearch(kw);
+    if (!kw.trim()) { setLnOptions([]); return; }
+    try {
+      const rows = await api<TableMeta[]>(`/assets/search?q=${encodeURIComponent(kw)}`);
+      setLnOptions(rows.map((r) => ({ value: `${r.database_name}.${r.name}`, id: r.id })));
+    } catch { setLnOptions([]); }
+  }
+
+  async function submitLineage() {
+    if (!detail || !lnRelatedId) { message.warning("请先选择关联表"); return; }
+    try {
+      await api(`/assets/tables/${detail.id}/lineage`, {
+        method: "POST",
+        body: JSON.stringify({ related_table_id: lnRelatedId, direction: lnDir, edge_type: "manual" }),
+      });
+      setLnRelatedId("");
+      setLnSearch("");
+      loadExtras(detail.id);
+    } catch (e) { message.error(e instanceof Error ? e.message : "登记血缘失败"); }
+  }
 
   const [syncing, setSyncing] = useState(false);
   const [job, setJob] = useState<SyncJobStatus | null>(null);
@@ -115,15 +208,6 @@ export default function AssetPage() {
       .finally(() => setLoadingTables(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDb]);
-
-  function openDetail(row: TableMeta) {
-    setDetailOpen(true);
-    setDetailLoading(true);
-    api<TableDetail>(`/assets/tables/${row.id}`)
-      .then(setDetail)
-      .catch((e) => message.error(e.message))
-      .finally(() => setDetailLoading(false));
-  }
 
   async function triggerSync() {
     setSyncing(true);
@@ -314,6 +398,87 @@ export default function AssetPage() {
                 { title: "分区键?", dataIndex: "is_partition", width: 90, render: (v) => (v ? <Tag color="gold">是</Tag> : <Tag>否</Tag>) },
               ]}
             />
+
+            <Card size="small" title="建表语句" style={{ marginTop: 16 }}>
+              {detail.create_sql ? (
+                <Typography.Paragraph code copyable style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12 }}>
+                  {detail.create_sql}
+                </Typography.Paragraph>
+              ) : (
+                <Typography.Text type="secondary">暂无建表语句（可重新同步元数据获取）</Typography.Text>
+              )}
+            </Card>
+
+            <Card size="small" title="业务标签" style={{ marginTop: 16 }}>
+              <Space wrap>
+                {detailTags.length ? (
+                  detailTags.map((t) => (
+                    <Tag key={t} color="blue" closable onClose={() => removeTag(t)}>{t}</Tag>
+                  ))
+                ) : (
+                  <Typography.Text type="secondary">暂无标签</Typography.Text>
+                )}
+                <Select
+                  mode="tags"
+                  style={{ minWidth: 180 }}
+                  placeholder="输入或选择标签"
+                  value={tagInput}
+                  onChange={(v) => setTagInput(v)}
+                  options={allTags.map((t) => ({ value: t.name, label: t.name }))}
+                />
+                <Button size="small" onClick={async () => { const list = [...tagInput]; for (const t of list) await addTag(t); }}>添加</Button>
+              </Space>
+            </Card>
+
+            <Card size="small" title="血缘" style={{ marginTop: 16 }}>
+              {!detailLineage ? (
+                <Typography.Text type="secondary">加载中…</Typography.Text>
+              ) : (
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Typography.Text strong>上游</Typography.Text>
+                    {detailLineage.upstream.length ? (
+                      <List size="small" dataSource={detailLineage.upstream} renderItem={(e) => (
+                        <List.Item actions={[<a key="rm" onClick={() => removeLineage(e.lineage_id)}>移除</a>]}>
+                          <span>{e.database_name}.{e.name} <Tag color="green">{e.edge_type}</Tag></span>
+                        </List.Item>
+                      )} />
+                    ) : <Typography.Text type="secondary">暂无上游</Typography.Text>}
+                  </Col>
+                  <Col span={12}>
+                    <Typography.Text strong>下游</Typography.Text>
+                    {detailLineage.downstream.length ? (
+                      <List size="small" dataSource={detailLineage.downstream} renderItem={(e) => (
+                        <List.Item actions={[<a key="rm" onClick={() => removeLineage(e.lineage_id)}>移除</a>]}>
+                          <span>{e.database_name}.{e.name} <Tag color="orange">{e.edge_type}</Tag></span>
+                        </List.Item>
+                      )} />
+                    ) : <Typography.Text type="secondary">暂无下游</Typography.Text>}
+                  </Col>
+                </Row>
+              )}
+              <div style={{ marginTop: 12 }}>
+                <Space wrap>
+                  <AutoComplete
+                    style={{ width: 220 }}
+                    value={lnSearch}
+                    placeholder="搜索关联表"
+                    options={lnOptions.map((o) => ({ value: o.value }))}
+                    onChange={(v) => searchLn(v)}
+                    onSelect={(v) => setLnRelatedId(lnOptions.find((o) => o.value === v)?.id ?? "")}
+                    filterOption={false}
+                  />
+                  <Select value={lnDir} onChange={(v) => setLnDir(v)} style={{ width: 110 }}
+                    options={[{ value: "upstream", label: "上游" }, { value: "downstream", label: "下游" }]} />
+                  <Button size="small" type="primary" onClick={submitLineage}>登记血缘</Button>
+                </Space>
+                <div style={{ marginTop: 8 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    血缘当前为手动登记；真实 SQL 作业解析后续接入（P1）。
+                  </Typography.Text>
+                </div>
+              </div>
+            </Card>
           </>
         )}
       </Drawer>

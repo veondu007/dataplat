@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.core.exceptions import ApiError
 from app.modules.asset import service
 from app.modules.asset.service import AssetSyncService, now_cn
 
@@ -143,6 +144,51 @@ def test_search_tables_by_table_name_and_column():
     assert any(
         x["name"] == "customer" and x["matched_field"] == "credit_score" for x in by_column
     )
+
+
+def test_get_table_detail_includes_ddl_and_partition():
+    s = _asset_session()
+    tbl = s.get(service.Table, "t1")
+    tbl.create_sql = "CREATE TABLE customer(...) UNIQUE KEY(customer_id)"
+    tbl.partition_cols = "dt"
+    s.commit()
+    d = service.get_table_detail(s, "t1")
+    assert d["create_sql"].startswith("CREATE TABLE")
+    assert d["partition_cols"] == "dt"
+
+
+def test_lineage_add_get_remove_and_self_loop_rejected():
+    s = _asset_session()
+    assert service.get_table_lineage(s, "t1") == {"upstream": [], "downstream": []}
+
+    created = service.add_lineage(s, "t1", "t2", "upstream")
+    ln = service.get_table_lineage(s, "t1")
+    assert [e["name"] for e in ln["upstream"]] == ["loan_contract"]
+    assert ln["downstream"] == []
+
+    with pytest.raises(ApiError):
+        service.add_lineage(s, "t1", "t1", "upstream")  # 自环拒绝
+    with pytest.raises(ApiError):
+        service.add_lineage(s, "t1", "t_missing", "upstream")  # 表不存在
+
+    service.remove_lineage(s, created["id"])
+    assert service.get_table_lineage(s, "t1") == {"upstream": [], "downstream": []}
+
+
+def test_tags_add_get_remove_and_auto_create():
+    s = _asset_session()
+    assert service.get_table_tags(s, "t1") == []
+
+    service.add_table_tag(s, "t1", "核心表")
+    service.add_table_tag(s, "t1", "核心表")  # 幂等
+    service.add_table_tag(s, "t1", "信贷")
+    assert service.get_table_tags(s, "t1") == ["信贷", "核心表"]  # 按名排序
+    all_tags = [t["name"] for t in service.list_tags(s)]
+    assert "核心表" in all_tags and "信贷" in all_tags
+
+    service.remove_table_tag(s, "t1", "信贷")
+    assert service.get_table_tags(s, "t1") == ["核心表"]
+    service.remove_table_tag(s, "t1", "不存在")  # 无关操作不报错
 
 
 if __name__ == "__main__":
