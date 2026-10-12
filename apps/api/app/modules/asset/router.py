@@ -24,6 +24,11 @@ def search(q: str = "", db: Session = Depends(get_db)):
     return ok(service.search_tables(db, q))
 
 
+@router.get("/stats", dependencies=_auth)
+def stats(db: Session = Depends(get_db)):
+    return ok(service.get_stats(db))
+
+
 @router.get("/databases", dependencies=_auth)
 def databases(db: Session = Depends(get_db)):
     return ok(service.list_databases(db))

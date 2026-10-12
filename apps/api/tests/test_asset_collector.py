@@ -5,6 +5,7 @@ import pytest
 from app.modules.asset.collector import (
     DorisMetadataConnector,
     _extract_partition_keys,
+    _extract_table_model,
     _to_int,
 )
 
@@ -75,6 +76,13 @@ def test_extract_partition_keys():
     assert _extract_partition_keys("PARTITION BY RANGE COLUMNS(a, b)") == {"a", "b"}
     assert _extract_partition_keys("PARTITION BY LIST(code)") == {"code"}
     assert _extract_partition_keys("UNIQUE KEY(id) DISTRIBUTED BY HASH(id)") == set()
+
+
+def test_extract_table_model():
+    assert _extract_table_model("CREATE TABLE t (\n id INT\n) UNIQUE KEY(id) DISTRIBUTED BY HASH(id)") == "UNIQUE"
+    assert _extract_table_model("CREATE TABLE s (d DATEV2, v SUM BIGINT) AGGREGATE KEY(d) DISTRIBUTED BY HASH(d)") == "AGGREGATE"
+    assert _extract_table_model("CREATE TABLE d (...) DUPLICATE KEY(a,b) DISTRIBUTED BY HASH(a)") == "DUPLICATE"
+    assert _extract_table_model("CREATE TABLE x (a INT)") is None  # 无 KEY 模型声明
 
 
 def test_list_databases_filters_system(conn_factory):

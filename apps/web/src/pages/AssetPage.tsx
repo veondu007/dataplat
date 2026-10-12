@@ -1,8 +1,8 @@
 import {
-  Button, Card, Col, Collapse, Descriptions, Drawer, Row, Statistic, Table, Tag,
+  Button, Card, Col, Collapse, Descriptions, Drawer, Empty, Input, Row, Space, Spin, Statistic, Table, Tag,
   Typography, message,
 } from "antd";
-import { DatabaseOutlined, SyncOutlined, TableOutlined } from "@ant-design/icons";
+import { DatabaseOutlined, SearchOutlined, SyncOutlined, TableOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { usePolling } from "../lib/usePolling";
@@ -37,6 +37,12 @@ type ColumnMeta = {
 
 type TableDetail = TableMeta & { columns: ColumnMeta[] };
 
+/** 搜索命中项：TableMeta 基础上补充来源数据源与命中字段。 */
+type SearchResult = TableMeta & {
+  datasource_name?: string | null;
+  matched_field?: string | null;
+};
+
 type SyncJobStatus = {
   job_id: string;
   status: string;
@@ -68,6 +74,24 @@ export default function AssetPage() {
   const [syncing, setSyncing] = useState(false);
   const [job, setJob] = useState<SyncJobStatus | null>(null);
   const [jobId, setJobId] = useState<string | undefined>(undefined);
+
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  function doSearch(q: string) {
+    const kw = q.trim();
+    setSearchQ(kw);
+    if (!kw) {
+      setSearchResults(null);
+      return;
+    }
+    setSearching(true);
+    api<SearchResult[]>(`/assets/search?q=${encodeURIComponent(kw)}`)
+      .then((rows) => setSearchResults(rows))
+      .catch((e) => message.error(e.message))
+      .finally(() => setSearching(false));
+  }
 
   const loadOverview = () => api<Overview>("/assets/overview").then(setOverview).catch(() => {});
   const loadDatabases = () =>
@@ -167,13 +191,22 @@ export default function AssetPage() {
           </span>
         }
         extra={
-          <Button
-            icon={<SyncOutlined spin={running} />}
-            onClick={triggerSync}
-            loading={syncing}
-          >
-            同步元数据{running ? "中…" : ""}
-          </Button>
+          <Space wrap>
+            <Input.Search
+              placeholder="搜索表名 / 库名 / 字段"
+              allowClear
+              enterButton={<SearchOutlined />}
+              style={{ width: 280 }}
+              onSearch={doSearch}
+            />
+            <Button
+              icon={<SyncOutlined spin={running} />}
+              onClick={triggerSync}
+              loading={syncing}
+            >
+              同步元数据{running ? "中…" : ""}
+            </Button>
+          </Space>
         }
       >
         {job?.status === "success" && job.items && (
@@ -185,6 +218,33 @@ export default function AssetPage() {
           <Tag color="error" style={{ marginBottom: 12 }}>{job.error_message}</Tag>
         )}
 
+        {searchQ ? (
+          <>
+            <Tag color="blue" style={{ marginBottom: 12 }}>
+              搜索 “{searchQ}”{searching ? " 中…" : `：${searchResults?.length ?? 0} 个结果`}
+            </Tag>
+            {searching ? (
+              <div style={{ textAlign: "center", padding: 32 }}><Spin /></div>
+            ) : !searchResults?.length ? (
+              <Empty description="未找到匹配的表" />
+            ) : (
+              <Table<SearchResult>
+                rowKey="id"
+                size="small"
+                dataSource={searchResults}
+                pagination={{ pageSize: 10 }}
+                columns={[
+                  { title: "库.表", key: "fq", render: (_, r) => <a onClick={() => openDetail(r)}>{r.database_name}.{r.name}</a> },
+                  { title: "命中字段", dataIndex: "matched_field", width: 140, render: (v) => (v ? <Tag color="gold">字段：{v}</Tag> : <Tag>表</Tag>) },
+                  { title: "注释", dataIndex: "comment", ellipsis: true, render: (v) => v || "-" },
+                  { title: "模型", dataIndex: "engine", width: 90, render: (v) => v || "-" },
+                  { title: "行数", dataIndex: "num_rows", width: 90, render: fmtNum },
+                  { title: "存储", dataIndex: "data_size", width: 100, render: fmtBytes },
+                ]}
+              />
+            )}
+          </>
+        ) : (
         <Collapse
           activeKey={selectedDb}
           onChange={(k) => setSelectedDb(Array.isArray(k) ? (k[0] as string) : (k as string))}
@@ -219,6 +279,7 @@ export default function AssetPage() {
             ),
           }))}
         />
+        )}
       </Card>
 
       <Drawer

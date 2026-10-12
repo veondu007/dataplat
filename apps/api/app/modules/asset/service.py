@@ -345,10 +345,21 @@ def get_table_detail(db: Session, table_id: str) -> dict:
 
 
 def search_tables(db: Session, q: str) -> list[dict]:
-    """按表名/库名/注释(及列名)模糊检索。"""
+    """按表名/库名/注释/字段名模糊检索,返回表及其所在库、数据源与命中来源。"""
     from sqlalchemy import or_
 
     keyword = f"%{q or ''}%"
+
+    # 字段名命中:记录每个表命中到的字段名(matched_field),供前端提示
+    col_hit_rows = db.execute(
+        select(Column.table_id, Column.name)
+        .where(Column.is_deleted.is_(False), Column.name.ilike(keyword))
+        .order_by(Column.name)
+    ).all()
+    col_hit_map: dict[str, str] = {}
+    for table_id, col_name in col_hit_rows:
+        col_hit_map.setdefault(table_id, col_name)
+
     rows = db.execute(
         select(Table)
         .where(
@@ -357,20 +368,88 @@ def search_tables(db: Session, q: str) -> list[dict]:
                 Table.name.ilike(keyword),
                 Table.database_name.ilike(keyword),
                 Table.comment.ilike(keyword),
+                Table.id.in_(list(col_hit_map.keys())),
             ),
         )
-        .order_by(Table.name)
+        .order_by(Table.database_name, Table.name)
         .limit(100)
     ).scalars().all()
     return [
         {
             "id": t.id,
+            "datasource_name": t.datasource.name if t.datasource else None,
             "database_name": t.database_name,
             "name": t.name,
             "comment": t.comment,
             "num_rows": t.num_rows,
             "data_size": t.data_size,
             "engine": t.engine,
+            "matched_field": col_hit_map.get(t.id),  # None → 按表/库/注释命中
         }
         for t in rows
     ]
+
+
+def get_stats(db: Session) -> dict:
+    """资产统计大盘:总量 + 库分布 + 引擎分布 + 存储/行数/字段 TOP 排行。"""
+    from sqlalchemy import case, distinct, func
+
+    total_tables = db.execute(
+        select(func.count()).select_from(Table).where(Table.is_deleted.is_(False))
+    ).scalar() or 0
+    total_columns = db.execute(
+        select(func.count()).select_from(Column).where(Column.is_deleted.is_(False))
+    ).scalar() or 0
+    ds_count = db.execute(select(func.count()).select_from(Datasource)).scalar() or 0
+    db_count = db.execute(
+        select(func.count(distinct(Table.database_name))).where(Table.is_deleted.is_(False))
+    ).scalar() or 0
+
+    engine_expr = case((Table.engine.is_(None), "未知"), else_=Table.engine)
+    _db_dist = db.execute(
+        select(Table.database_name, func.count().label("cnt"))
+        .where(Table.is_deleted.is_(False))
+        .group_by(Table.database_name)
+        .order_by(func.count().desc())
+        .limit(12)
+    ).all()
+    _eng_dist = db.execute(
+        select(engine_expr, func.count().label("cnt"))
+        .where(Table.is_deleted.is_(False))
+        .group_by(engine_expr)
+        .order_by(func.count().desc())
+    ).all()
+    _top_size = db.execute(
+        select(Table.name, Table.database_name, Table.data_size)
+        .where(Table.is_deleted.is_(False), Table.data_size.isnot(None))
+        .order_by(Table.data_size.desc())
+        .limit(10)
+    ).all()
+    _top_rows = db.execute(
+        select(Table.name, Table.database_name, Table.num_rows)
+        .where(Table.is_deleted.is_(False), Table.num_rows.isnot(None))
+        .order_by(Table.num_rows.desc())
+        .limit(10)
+    ).all()
+    _top_columns = db.execute(
+        select(Table.name, Table.database_name, func.count(Column.id).label("cnt"))
+        .join(Column, Column.table_id == Table.id)
+        .where(Table.is_deleted.is_(False), Column.is_deleted.is_(False))
+        .group_by(Table.id)
+        .order_by(func.count(Column.id).desc())
+        .limit(10)
+    ).all()
+
+    return {
+        "totals": {
+            "datasource_count": ds_count,
+            "database_count": db_count,
+            "table_count": total_tables,
+            "column_count": total_columns,
+        },
+        "db_distribution": [{"database": r[0], "count": r[1]} for r in _db_dist],
+        "engine_distribution": [{"engine": r[0], "count": r[1]} for r in _eng_dist],
+        "top_size": [{"name": r[0], "database": r[1], "data_size": r[2]} for r in _top_size],
+        "top_rows": [{"name": r[0], "database": r[1], "num_rows": r[2]} for r in _top_rows],
+        "top_columns": [{"name": r[0], "database": r[1], "column_count": r[2]} for r in _top_columns],
+    }

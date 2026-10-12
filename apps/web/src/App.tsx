@@ -1,8 +1,9 @@
-import { DatabaseOutlined, MessageOutlined, CodeOutlined, HomeOutlined, CloudServerOutlined } from "@ant-design/icons";
+import { DatabaseOutlined, MessageOutlined, CodeOutlined, HomeOutlined, CloudServerOutlined, FundOutlined } from "@ant-design/icons";
 import { Layout, Menu, Typography, Tag } from "antd";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import OverviewPage from "./pages/OverviewPage";
 import AssetPage from "./pages/AssetPage";
+import AssetStatsPage from "./pages/AssetStatsPage";
 import DatasourcePage from "./pages/DatasourcePage";
 import SqlPage from "./pages/SqlPage";
 import AiqaPage from "./pages/AiqaPage";
@@ -29,18 +30,30 @@ export default function App() {
     return <Navigate to="/login" replace />;
   }
 
-  const selected = "/" + (location.pathname.split("/")[1] || "");
+  // /assets/stats 时精确高亮统计项，其余取一级路径
+  const parts = location.pathname.split("/").filter(Boolean);
+  let selected = "/" + (parts[0] || "");
+  if (parts[0] === "assets" && parts[1] === "stats") selected = "/assets/stats";
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Sider theme="light" width={220}>
         <div style={{ padding: 16, fontWeight: 700 }}>DataPlat</div>
         <Menu
+          defaultOpenKeys={["asset-group"]}
           selectedKeys={[selected === "/" ? "/" : selected]}
           items={[
             { key: "/", icon: <HomeOutlined />, label: <Link to="/">总览</Link> },
             { key: "/datasources", icon: <CloudServerOutlined />, label: <Link to="/datasources">数据源</Link> },
-            { key: "/assets", icon: <DatabaseOutlined />, label: <Link to="/assets">数据资产</Link> },
+            {
+              key: "asset-group",
+              icon: <DatabaseOutlined />,
+              label: "数据资产",
+              children: [
+                { key: "/assets", label: <Link to="/assets">数据地图</Link> },
+                { key: "/assets/stats", icon: <FundOutlined />, label: <Link to="/assets/stats">资产统计</Link> },
+              ],
+            },
             { key: "/sql", icon: <CodeOutlined />, label: <Link to="/sql">SQL 开发</Link> },
             { key: "/aiqa", icon: <MessageOutlined />, label: <Link to="/aiqa">AI 问数</Link> },
           ]}
@@ -65,6 +78,7 @@ export default function App() {
             <Route path="/" element={<OverviewPage />} />
             <Route path="/datasources" element={<DatasourcePage />} />
             <Route path="/assets" element={<AssetPage />} />
+            <Route path="/assets/stats" element={<AssetStatsPage />} />
             <Route path="/sql" element={<SqlPage />} />
             <Route path="/aiqa" element={<AiqaPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

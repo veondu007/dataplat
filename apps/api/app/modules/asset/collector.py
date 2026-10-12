@@ -108,6 +108,8 @@ class DorisMetadataConnector:
                 rows = cur.fetchall()
             out = []
             for name, comment, engine, num_rows, data_len, create_time, update_time in rows:
+                # information_schema 的 ENGINE 恒为存储引擎("Doris");表模型用 SHOW CREATE 解析
+                engine = self._table_model(database, name) or engine
                 out.append(
                     {
                         "database_name": database,
@@ -173,6 +175,26 @@ class DorisMetadataConnector:
         finally:
             conn.close()
 
+    def _table_model(self, database: str, table: str) -> str | None:
+        """从 SHOW CREATE TABLE 解析表模型(UNIQUE/AGGREGATE/DUPLICATE);失败回退 None。"""
+        conn = self._connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW CREATE TABLE `{database}`.`{table}`")
+                row = cur.fetchone()
+            # Doris 返回 (Table, Create Table) 两列;DDL 在第二列
+            if not row:
+                return None
+            if isinstance(row, tuple):
+                ddl = row[1] if len(row) > 1 else row[0]
+            else:
+                ddl = str(row or "")
+            return _extract_table_model(ddl)
+        except Exception:
+            return None
+        finally:
+            conn.close()
+
 
 def _to_int(v) -> int | None:
     if v is None:
@@ -196,6 +218,14 @@ def _full_type(dtype: str, charlen) -> str:
     if dtype in ("DECIMAL",):
         return dtype
     return dtype
+
+
+def _extract_table_model(ddl: str) -> str | None:
+    """从 SHOW CREATE 提取表模型(UNIQUE/AGGREGATE/DUPLICATE KEY),解析失败返回 None。"""
+    import re
+
+    m = re.search(r"\b(UNIQUE|AGGREGATE|DUPLICATE)\s+KEY\b", ddl, re.IGNORECASE)
+    return m.group(1).upper() if m else None
 
 
 def _extract_partition_keys(ddl: str) -> set[str]:
